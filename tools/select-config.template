@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+
+#
+# This script is called by the "bwinstall" utility before deploying the BW application.
+# It attempts to link the deployment configuration file of the package ($INSTALL_BASECONFIG)
+# to a configuration suitable for the target domain ($INSTALL_DOMAIN).
+# The individual domain configurations are expected at "<package>/envconfig/<domain>.xml".
+#
+
+set -o errexit
+set -o pipefail
+# set -o xtrace
+
+readonly __dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly __file="${__dir}/$(basename "${BASH_SOURCE[0]}")"
+readonly __base="$(basename "${__file}" .sh)"
+
+# The environment set by the installation utility is read-only
+[[ -n "${!INSTALL_@}" ]] && readonly "${!INSTALL_@}"
+
+# Check the installation environment
+: ${INSTALL_DOMAIN:?"Expected environment variable is missing"}
+
+# Does the package even specify a default configuration?
+if [[ -z "${INSTALL_BASECONFIG}" ]]; then
+    echo "The package does not include a deployment configuration."
+    exit 0
+fi
+
+# All paths are relative to the package source
+pushd "${INSTALL_PACKAGEDIR:-"."}" >/dev/null
+
+# Attempt to figure out the configuration for the environment and soft link to it.
+config_domain="envconfig/${INSTALL_DOMAIN}.xml"
+config_default="envconfig/default.xml"
+if [[ -f "${config_domain}" ]]; then
+    echo "Linking to domain configuration for \"${INSTALL_DOMAIN}\" ..."
+    ln -sfv "${config_domain}" "${INSTALL_BASECONFIG}"
+elif [[ -f "${config_default}" ]]; then
+    echo "Linking to default configuration ..."
+    ln -sfv "${config_default}" "${INSTALL_BASECONFIG}"
+else
+    echo "There is no suitable deployment configuration for this environment!" >&2
+    exit 1
+fi
+
+popd >/dev/null

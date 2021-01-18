@@ -1,0 +1,134 @@
+#!/usr/bin/env bash
+
+#
+# This script is executed by the "bwinstall" utility before or after deploying the BW application.
+# It implements any custom installation behaviour (i.e. anything other than deploying the EAR).
+# Typical examples are: installation requirement checks, automated configuration lookup, creation
+# of application directories, copying or modification of external files, database initialization.
+#
+# The following environment variables are available to this script:
+#
+#   INSTALL_PACKAGEDIR    = The path of the directory the installation package is located in.
+#                           Under normal cicumstances this will also be the working directory.
+#   INSTALL_DOMAIN        = The target domain the application is being installed into.
+#   INSTALL_USER          = The user name for accessing the domain.
+#   INSTALL_CREDENTIAL    = An encrypted file with the users credentials.
+#   INSTALL_APPNAME       = The name of the BW application being installed (including folders).
+#   INSTALL_ARCHIVE       = The enterprise application archive (EAR) file of the application.
+#                           Will typically be a path relative to the package directory.
+#   INSTALL_BASECONFIG    = The initial deployment configuration for the application.
+#                           Will typically be a path relative to the package directory.
+#                           May also be missing, if the package does not include a configuration.
+#   INSTALL_CURRENTCONFIG = The current deployment configuration of the appliation.
+#                           Only present if the application is already installed and being updated.
+#   INSTALL_DEPLOYCONFIG  = The deployment configuration file actually used for installation.
+#                           Only present after a successful deployment.
+#   INSTALL_UPDATE        = Set to "true" if the application is already installed and being updated.
+#   INSTALL_OVERWRITE     = Set to "true" if a clean installation is being forced.
+#
+
+set -o errexit
+set -o pipefail
+# set -o xtrace
+
+readonly __dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly __file="${__dir}/$(basename "${BASH_SOURCE[0]}")"
+readonly __base="$(basename "${__file}" .sh)"
+
+# The environment set by the installation utility is read-only
+[[ -n "${!INSTALL_@}" ]] && readonly "${!INSTALL_@}"
+
+# Check the installation environment
+: ${INSTALL_PACKAGEDIR:?"Expected environment variable is missing"}
+: ${INSTALL_DOMAIN:?"Expected environment variable is missing"}
+: ${INSTALL_USER:?"Expected environment variable is missing"}
+: ${INSTALL_CREDENTIAL:?"Expected environment variable is missing"}
+: ${INSTALL_APPNAME:?"Expected environment variable is missing"}
+: ${INSTALL_ARCHIVE:?"Expected environment variable is missing"}
+
+# Check the TIBCO environment
+[[ $(whoami) != "tibco" ]] && { echo "This should only be run as user \"tibco\"!" >&2 ; exit 1 ; }
+: ${TIBCO_HOME:?"Variable not set"}
+: ${TIBCO_APPLICATION:?"Variable not set"}
+
+#
+# DER FOLGENDE TEIL KANN DURCH EIN BELIEBIGES SCRIPT ERSETZT WERDEN.
+# ES SIND BEREITS EINIGE BEISPIELE UND NÜTZLICHE FUNKTIONEN VORHANDEN.
+# NICHT BENÖTIGTE TEILE SOLLTEN ENTFERNT WERDEN.
+#
+# Ein gutes und robustes Script sollte ...
+#
+#   * bei Fehlern die Ausführung mit einem Return Code ungleich 0 abbrechen (siehe: set -o errexit).
+#   * ohne Nebeneffekte beliebig oft ausgeführt werden können. D.h.
+#       - prüfen welche Aktionen überhaupt erforderlich sind und nur diese durchführen.
+#       - Dateien, Einstellungen, etc. nur überschreiben, wenn dies explizit verlangt
+#         wird ($INSTALL_OVERWRITE) oder für die Installation tatsächlich notwendig ist.
+#   * immer (d.h. auch bei einem Abbruch) vollständig hinter sich aufräumen (Stichwort "Exit-Trap").
+#   * möglichst wenige Annahmen über die Umgebung zur Laufzeit machen.
+#       - Laufzeitvoraussetzungen explizit prüfen und ggf. die Ausführung abbrechen.
+#       - relative Pfade mit Vorsicht verwenden (d.h. wenn der Basispfad dazu eindeutig ist).
+#   * sparsam bei der Erzeugung von Text-Output sein.
+#   * möglichst nicht interaktiv sein.
+#   * in allen möglichen Situationen (z.B. Neuinstallation, Update, Restart nach Abbruch, ...)
+#     hinreichend getestet sein.
+#
+
+# TODO: In "$appid" den Namen für das eigene Applikationsverzeichnis angeben.
+appid="bwapplication"
+appdir=$(realpath -m "${TIBCO_APPLICATION}/${appid}")
+
+# Legt das Applikationsverzeichnis und seine Unterverzeichnisse an.
+createappdir() {
+    # TODO: In "$subdirs" die Liste der benötigten Unterverzeichnisse angeben.
+    local subdirs=(
+        "input"
+        "log"
+        "ledger"
+        "output"
+        "output/debug"
+        "archive"
+        "etc"
+    )
+    echo "Creating application directory ${appdir} ..."
+    mkdir -v -p "${appdir}"
+    pushd "${appdir}" >/dev/null
+    mkdir -v -p "${subdirs[@]}"
+    popd >/dev/null
+}
+
+# Kopiert Dateien und Verzeichnisse aus dem Installationspaket in das Appliationsverzeichnis.
+copypackagefiles() {
+    createappdir >/dev/null
+    local cpargs=("-v" "-r")
+    if ${INSTALL_OVERWRITE:-false}; then
+        echo "Overwriting application files ..."
+        cpargs+=("--force" "--backup=numbered")
+    else
+        echo "Copying application files ..."
+        cpargs+=("--no-clobber")
+    fi
+    pushd "${INSTALL_PACKAGEDIR:-"."}" >/dev/null
+    # TODO: Die zu kopierenden Dateien und Verzeichnisse hier eintragen. Die zu kopierenden Objekte
+    #       müssen in dem Paket enthalten sein und die Pfade sollten relativ dazu angegeben werden.
+    #       Die Angabe der Zielpfade sollte absolut erfolgen. Die Zielverzeichnisse sollten bereits
+    #       im Vorfeld angelegt werden, da dies beim kopieren nicht automatisch erfolgt.
+    #       Zwecks Eindeutigkeit der Zielpfade ist u.U. der Schalter "-T" sinnvoll!
+    cp "${cpargs[@]}"    "relative/to/package/singlefile.txt"        "${appdir}/etc/"
+    cp "${cpargs[@]}"    "relative/to/package/mappings/"*any*.xml    "${appdir}/etc/"
+    cp "${cpargs[@]}" -T "relative/to/package/mappings/"             "${appdir}/mymappings/"
+    cp "${cpargs[@]}" -T "relative/to/package/mappings/myfile.xml"   "${appdir}/etc/myfile.xml"
+    popd >/dev/null
+}
+
+# Zeigt das Installations-Environment an.
+printinstallenv() {
+    echo "The installation environment is:"
+    for var in "${!INSTALL_@}"; do
+        printf '\t%s=%s\n' "${var}" "$(eval echo "\$${var}")"
+    done
+}
+
+# TODO: Die Funktionen tatsächlich aufrufen.
+# createappdir
+# copypackagefiles
+echo "This custom script for ${INSTALL_APPNAME##*/} has not been implemented yet!"
