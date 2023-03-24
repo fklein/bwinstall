@@ -49,48 +49,40 @@ readonly __base="$(basename "${__file}" .sh)"
 : ${INSTALL_APPNAME:?"Expected environment variable is missing"}
 : ${INSTALL_ARCHIVE:?"Expected environment variable is missing"}
 
+#
+# REPLACE THE FOLLOWING PART WITH YOUR CUSTOM SCRIPT.
+# THERE ARE ALREADY A FEW EXAMPLES AND UTILITY FUNCTIONS.
+# REMOVE ANY UNUSED PARTS.
+#
+# A well behaving script should:
+#   * Exit with a non-zero returncode when encountering any error (use "set -o errexit").
+#   * Be idempotent (i.e. can be called multiple times without breaking anything or chaging the result).
+#   * Always clean up after itself (even in the event of  an error, see "exit trap").
+#   * Make minimal assumptions about the runtime environment. Explicitly check all runtime requirements.
+#   * Not generate a lot output to the console.
+#   * Preferrably not be interactive.
+#   * Be tested thoroughly in all situations (clean install, update, restart after failed install, ...).
+#
+
 # Check the TIBCO environment
 [[ $(whoami) != "tibco" ]] && { echo "This should only be run as user \"tibco\"!" >&2 ; exit 1 ; }
 : ${TIBCO_HOME:?"Variable not set"}
 : ${TIBCO_APPLICATION:?"Variable not set"}
 
-#
-# DER FOLGENDE TEIL KANN DURCH EIN BELIEBIGES SCRIPT ERSETZT WERDEN.
-# ES SIND BEREITS EINIGE BEISPIELE UND NÜTZLICHE FUNKTIONEN VORHANDEN.
-# NICHT BENÖTIGTE TEILE SOLLTEN ENTFERNT WERDEN.
-#
-# Ein gutes und robustes Script sollte ...
-#
-#   * bei Fehlern die Ausführung mit einem Return Code ungleich 0 abbrechen (siehe: set -o errexit).
-#   * ohne Nebeneffekte beliebig oft ausgeführt werden können. D.h.
-#       - prüfen welche Aktionen überhaupt erforderlich sind und nur diese durchführen.
-#       - Dateien, Einstellungen, etc. nur überschreiben, wenn dies explizit verlangt
-#         wird ($INSTALL_OVERWRITE) oder für die Installation tatsächlich notwendig ist.
-#   * immer (d.h. auch bei einem Abbruch) vollständig hinter sich aufräumen (Stichwort "Exit-Trap").
-#   * möglichst wenige Annahmen über die Umgebung zur Laufzeit machen.
-#       - Laufzeitvoraussetzungen explizit prüfen und ggf. die Ausführung abbrechen.
-#       - relative Pfade mit Vorsicht verwenden (d.h. wenn der Basispfad dazu eindeutig ist).
-#   * sparsam bei der Erzeugung von Text-Output sein.
-#   * möglichst nicht interaktiv sein.
-#   * in allen möglichen Situationen (z.B. Neuinstallation, Update, Restart nach Abbruch, ...)
-#     hinreichend getestet sein.
-#
-
-# TODO: In "$appid" den Namen für das eigene Applikationsverzeichnis angeben.
+# TODO: Set "${appid}" to define the name of the applications working directory.
 appid="bwapplication"
 appdir=$(realpath -m "${TIBCO_APPLICATION}/${appid}")
 
-# Legt das Applikationsverzeichnis und seine Unterverzeichnisse an.
+# Create the applications working directory
 createappdir() {
-    # TODO: In "$subdirs" die Liste der benötigten Unterverzeichnisse angeben.
+    # TODO: Define your directory structure to "${subdirs}"
     local subdirs=(
         "input"
         "log"
         "ledger"
         "output"
-        "output/debug"
-        "archive"
         "etc"
+        "some/other/path"
     )
     echo "Creating application directory ${appdir} ..."
     mkdir -v -p "${appdir}"
@@ -99,7 +91,7 @@ createappdir() {
     popd >/dev/null
 }
 
-# Kopiert Dateien und Verzeichnisse aus dem Installationspaket in das Appliationsverzeichnis.
+# Copy files and directories from the installation package to the applications working directory.
 copypackagefiles() {
     createappdir >/dev/null
     local cpargs=("-v" "-r")
@@ -111,11 +103,7 @@ copypackagefiles() {
         cpargs+=("--no-clobber")
     fi
     pushd "${INSTALL_PACKAGEDIR:-"."}" >/dev/null
-    # TODO: Die zu kopierenden Dateien und Verzeichnisse hier eintragen. Die zu kopierenden Objekte
-    #       müssen in dem Paket enthalten sein und die Pfade sollten relativ dazu angegeben werden.
-    #       Die Angabe der Zielpfade sollte absolut erfolgen. Die Zielverzeichnisse sollten bereits
-    #       im Vorfeld angelegt werden, da dies beim kopieren nicht automatisch erfolgt.
-    #       Zwecks Eindeutigkeit der Zielpfade ist u.U. der Schalter "-T" sinnvoll!
+    # TODO: Define which paths to copy. All objects must be present in the package directory.
     cp "${cpargs[@]}"    "relative/to/package/singlefile.txt"        "${appdir}/etc/"
     cp "${cpargs[@]}"    "relative/to/package/mappings/"*any*.xml    "${appdir}/etc/"
     cp "${cpargs[@]}" -T "relative/to/package/mappings/"             "${appdir}/mymappings/"
@@ -123,7 +111,7 @@ copypackagefiles() {
     popd >/dev/null
 }
 
-# Zeigt das Installations-Environment an.
+# Show the installation environment.
 printinstallenv() {
     echo "The installation environment is:"
     for var in "${!INSTALL_@}"; do
@@ -131,7 +119,7 @@ printinstallenv() {
     done
 }
 
-# TODO: Die Funktionen tatsächlich aufrufen.
+# TODO: Actually call any of the functions defined above or add your custom code.
 # createappdir
 # copypackagefiles
 echo "This custom script for ${INSTALL_APPNAME##*/} has not been implemented yet!"
