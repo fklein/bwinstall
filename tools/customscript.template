@@ -26,6 +26,9 @@
 #   INSTALL_UPDATE        = Set to "true" if the application is already installed and being updated.
 #   INSTALL_OVERWRITE     = Set to "true" if a clean installation is being forced.
 #
+# This environment is considered read-only! Keep in mind that changing any of the values will not
+# affect the parent process (which is the "bwinstall" utility).
+#
 
 set -o errexit
 set -o pipefail
